@@ -1,5 +1,5 @@
 /* jshint -W043, laxbreak:true, -W030 */
-/* globals app, UserInteractionLevel */
+/* globals app, $, UserInteractionLevel, ExportOptionsPNG24, Folder, ExportType */
 
 // https://forums.adobe.com/message/4683491#4683491
 
@@ -10,42 +10,40 @@
 
 var EXPORT = (function($application, $helper, undefined) {
 	
-	// Private variable container object:
 	var _private = {};
 	var _doc = null;
 	var _history = [];
 	var _layers = [];
-	var _level = $application.userInteractionLevel; // Gets the current user interaction level.;
+	var _level = {};
 	
-	// Script setup:
+	/**
+	 * Script initialization method.
+	 *
+	 * @return {[type]} [description]
+	 */
+	
 	_private.init = function() {
 		
-		// Open document(s)?
+		// Are there any open document(s)?
 		if ($application.documents.length > 0) {
 			
 			_doc = $application.activeDocument;
 			
-			// Record environment’s current “Interaction Level”:
-			_private.setInteractionLevel();
+			_private.setUserInteractionLevel();
 			
-			// Record layer visibility:
-			_private.layerHistory();
+			_private.recordLayerVisibility();
 			
-			// Load and run action:
-			_private.manageAction();
+			_private.loadAction();
 			
 			_private.getVisibleLayers();
 			
-			_private.createImages();
+			_private.showSelectedLayers();
 			
-			// Unload action:
-			_private.manageAction(true);
+			_private.unloadAction();
 			
-			// Restore layer visibility:
-			_private.layerHistory(true);
+			_private.restoreLayerVisibility();
 			
-			// Restore environment’s “Interaction Level”:
-			_private.setInteractionLevel(true);
+			_private.restoreUserInteractionLevel();
 			
 		} else {
 			
@@ -56,107 +54,116 @@ var EXPORT = (function($application, $helper, undefined) {
 		
 	};
 	
-	_private.setInteractionLevel = function(restore) {
+	/**
+	 * Record environment’s current “Interaction Level”.
+	 *
+	 * @return {[type]} [description]
+	 */
+	
+	_private.setUserInteractionLevel = function() {
 		
-		if (restore) {
-			
-			// Restore the user interaction level:
-			$application.userInteractionLevel = _level;
-			
-		} else {
-			
-			// Overrides the current user interaction level:
-			$application.userInteractionLevel = UserInteractionLevel.DONTDISPLAYALERTS;
-			
-		}
+		// Save the current user interaction level:
+		_level = $application.userInteractionLevel;
+		
+		// Override the current user interaction level:
+		$application.userInteractionLevel = UserInteractionLevel.DONTDISPLAYALERTS;
+		
+	};
+	
+	/**
+	 * Restore environment’s “Interaction Level”.
+	 *
+	 * @return {[type]} [description]
+	 */
+	
+	_private.restoreUserInteractionLevel = function() {
+		
+		// Restore the user interaction level:
+		$application.userInteractionLevel = _level;
 		
 	};
 	
 	// Create action file and load it into the actions palette.
-	_private.manageAction = function(unload) {
+	_private.loadAction = function() {
 		
-		var aia;
+		var aia = new File('~/temp.aia'); // Temporary file created in home directory.
 		
-		if (unload) {
-			
-			$application.unloadAction('temp', ''); // Action Set Name.
-			
-		} else {
-			
-			aia = new File('~/temp.aia'); // Temporary file created in home directory.
-			
-			// Action string:
-			var action = [
-				'/version 3',
+		// Action string:
+		var action = [
+			'/version 3',
+			'/name [',
+				'4', // Group name character count.
+				'74656d70', // Group name as a hash.
+			']',
+			'/isOpen 0',
+			'/actionCount 1',
+			'/action-1 {',
 				'/name [',
-					'4', // Group name character count.
-					'74656d70', // Group name as a hash.
+					'4', // Action name character count.
+					'74656d70', // Action name as a hash.
 				']',
+				'/keyIndex 0',
+				'/colorIndex 0',
 				'/isOpen 0',
-				'/actionCount 1',
-				'/action-1 {',
-					'/name [',
-						'4', // Action name character count.
-						'74656d70', // Action name as a hash.
+				'/eventCount 1',
+				'/event-1 {',
+					'/useRulersIn1stQuadrant 0',
+					'/internalName (ai_plugin_Layer)',
+					'/localizedName [',
+						'5',
+						'4c61796572',
 					']',
-					'/keyIndex 0',
-					'/colorIndex 0',
 					'/isOpen 0',
-					'/eventCount 1',
-					'/event-1 {',
-						'/useRulersIn1stQuadrant 0',
-						'/internalName (ai_plugin_Layer)',
-						'/localizedName [',
-							'5',
-							'4c61796572',
-						']',
-						'/isOpen 0',
-						'/isOn 1',
-						'/hasDialog 0',
-						'/parameterCount 3',
-						'/parameter-1 {',
-							'/key 1836411236',
-							'/showInPalette -1',
-							'/type (integer)',
-							'/value 7',
-						'}',
-						'/parameter-2 {',
-							'/key 1937008996',
-							'/showInPalette -1',
-							'/type (integer)',
-							'/value 23',
-						'}',
-						'/parameter-3 {',
-							'/key 1851878757',
-							'/showInPalette -1',
-							'/type (ustring)',
-							'/value [',
-								'11',
-								'48696465204f7468657273',
-							']',
-						'}',
+					'/isOn 1',
+					'/hasDialog 0',
+					'/parameterCount 3',
+					'/parameter-1 {',
+						'/key 1836411236',
+						'/showInPalette -1',
+						'/type (integer)',
+						'/value 7',
 					'}',
-				'}'
-			].join('\n');
-			
-			// Open and write the action string:
-			aia.open('w');
-			aia.write(action);
-			aia.close();
-			
-			// Load action into actions palette:
-			$application.loadAction(aia);
-			
-			// Remove the temporary file:
-			aia.remove();
-			
-			// Show all layers:
-			_private.showOrHideAllLayers(true);
-			
-			// Run the temporary action:
-			$application.doScript('temp', 'temp', false); // Action Name, Action Set Name.
-			
-		}
+					'/parameter-2 {',
+						'/key 1937008996',
+						'/showInPalette -1',
+						'/type (integer)',
+						'/value 23',
+					'}',
+					'/parameter-3 {',
+						'/key 1851878757',
+						'/showInPalette -1',
+						'/type (ustring)',
+						'/value [',
+							'11',
+							'48696465204f7468657273',
+						']',
+					'}',
+				'}',
+			'}'
+		].join('\n');
+		
+		// Open and write the action string:
+		aia.open('w');
+		aia.write(action);
+		aia.close();
+		
+		// Load action into actions palette:
+		$application.loadAction(aia);
+		
+		// Remove the temporary file:
+		aia.remove();
+		
+		// Show all layers (required for the above action to work properly):
+		_private.showAllLayers(true);
+		
+		// Run the temporary action:
+		$application.doScript('temp', 'temp', false); // Action Name, Action Set Name.
+		
+	};
+	
+	_private.unloadAction = function() {
+		
+		$application.unloadAction('temp', ''); // Action Set Name.
 		
 	};
 	
@@ -192,34 +199,50 @@ var EXPORT = (function($application, $helper, undefined) {
 		
 	};
 	
-	_private.showOrHideAllLayers = function(visible) {
+	_private.showAllLayers = function() {
 		
 		var count = _doc.layers.length;
 		
 		while (count--) {
 			
-			_doc.layers[count].visible = ( !! visible); // Default is hide.
+			_doc.layers[count].visible = true;
 			
 		}
 		
 	};
 	
-	_private.createImages = function() {
+	_private.hideAllLayers = function() {
+		
+		var count = _doc.layers.length;
+		
+		while (count--) {
+			
+			_doc.layers[count].visible = false;
+			
+		}
+		
+	};
+	
+	_private.showSelectedLayers = function() {
 		
 		var count = _layers.length;
 		var layer;
 		
-		while (count--) {
+		if (count > 0) {
 			
-			layer = _layers[count];
-			
-			_private.showOrHideAllLayers();
-			
-			layer.visible = true;
-			
-			$application.redraw();
-			
-			_private.exportImage(count);
+			while (count--) {
+				
+				layer = _layers[count];
+				
+				_private.hideAllLayers();
+				
+				layer.visible = true;
+				
+				$application.redraw();
+				
+				_private.exportImage(count);
+				
+			}
 			
 		}
 		
@@ -262,13 +285,12 @@ var EXPORT = (function($application, $helper, undefined) {
 	};
 	
 	/**
-	 * Creates layer visibility history and handles layer visibility restoration.
+	 * Record layer visibility before script runs.
 	 *
-	 * @param {boolean} restore If `true`, then restore history as found in `_history` array.
-	 * @return {void}
+	 * @return {[type]} [description]
 	 */
 	
-	_private.layerHistory = function(restore) {
+	_private.recordLayerVisibility = function() {
 		
 		var layers = _doc.layers;
 		var i;
@@ -277,20 +299,32 @@ var EXPORT = (function($application, $helper, undefined) {
 		// Loop over all top-level layers in document:
 		for (i = 0, il = layers.length; i < il; i++) {
 			
-			// Do we want to restore previous layer's visibility?
-			if (restore) {
-				
-				// Yes, so get visibility flags from history array:
-				layers[i].visible = _history[i];
-				
-			} else {
-				
-				// Not now, but create history array for later restoration:
-				_history[i] = layers[i].visible;
-				
-			}
+			// Create history array for later restoration:
+			_history[i] = layers[i].visible;
 		
-		};
+		}
+		
+	};
+	
+	/**
+	 * Restore layer visibility before the script ran.
+	 *
+	 * @return {[type]} [description]
+	 */
+	
+	_private.restoreLayerVisibility = function() {
+		
+		var layers = _doc.layers;
+		var i;
+		var il;
+		
+		// Loop over all top-level layers in document:
+		for (i = 0, il = layers.length; i < il; i++) {
+			
+			// Get visibility flags from history array:
+			layers[i].visible = _history[i];
+			
+		}
 		
 	};
 	
